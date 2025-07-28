@@ -5,16 +5,20 @@ from multiprocessing import Pool, cpu_count
 from functools import partial
 from tqdm import tqdm
 
+# FPS for pitch velocity calculation
+FPS = 15
+
 # ----------------------------
 # 감정 규칙 (AU_c 기반, 감정별 개별 threshold)
 # ----------------------------
 AU_RULES = {
-    'happy':     (['AU06_c', 'AU12_c'], 1),
-    'sad':       (['AU01_c', 'AU04_c', 'AU15_c'], 2),
-    'anger':     (['AU04_c', 'AU05_c', 'AU07_c', 'AU23_c'], 3),
-    'disgust':   (['AU09_c', 'AU15_c', 'AU16_c'], 2),
-    'fear':      (['AU01_c', 'AU02_c', 'AU04_c', 'AU05_c', 'AU07_c', 'AU20_c', 'AU26_c'], 5),
-    'surprise':  (['AU01_c', 'AU02_c', 'AU05_c', 'AU26_c'], 2)
+    'happy':     (['AU06_c', 'AU12_c'], 2),  # cheek raiser + lip corner puller
+    'sad':       (['AU01_c', 'AU04_c', 'AU15_c'], 3),  # inner brow raiser, brow lowerer, lip corner depressor
+    'anger':     (['AU04_c', 'AU05_c', 'AU07_c', 'AU23_c'], 4),  # brow lowerer, upper lid raiser, lid tightener, lip tightener
+    'disgust':   (['AU09_c', 'AU15_c', 'AU16_c'], 3),  # nose wrinkler, lip corner depressor, lower lip depressor
+    'fear':      (['AU01_c', 'AU02_c', 'AU04_c', 'AU05_c', 'AU07_c', 'AU20_c', 'AU26_c'], 7),  
+    # inner brow raiser, outer brow raiser, brow lowerer, upper lid raiser, lid tightener, lip stretcher, jaw drop
+    'surprise':  (['AU01_c', 'AU02_c', 'AU05_c', 'AU26_c'], 3),  # inner brow raiser, outer brow raiser, upper lid raiser, jaw drop
 }
 
 VALENCE_MAPPING = {
@@ -57,20 +61,21 @@ def process_csv(csv_path):
         df = pd.read_csv(csv_path)
         df.columns = df.columns.str.strip()  # 공백 제거
 
-        # 디버그 로그: 첫 프레임 x/y 좌표
-        try:
-            x_sample = [df.loc[0, f"x_{i}"] for i in range(5)]
-            y_sample = [df.loc[0, f"y_{i}"] for i in range(5)]
-            print(f"[디버그] {os.path.basename(csv_path)} 첫 프레임 x/y: {x_sample}, {y_sample}")
-        except Exception as e:
-            print(f"[디버그 실패] {e}")
-
         # bbox 계산
         df["bbox_area"] = df.apply(calculate_bbox_area, axis=1)
 
         # 감정 추론
         df["emotion"] = df.apply(predict_emotion_by_rule, axis=1)
         df["valence_label"] = df["emotion"].map(lambda e: VALENCE_MAPPING.get(e, "neutral"))
+
+        # pitch 속도 계산 (pitch velocity)
+        dt = 1.0 / FPS
+        if 'pose_Rx' in df.columns:
+            df['pitch_vel'] = df['pose_Rx'].diff() / dt  # raw change (°/s)
+            # FutureWarning 해결: chained assignment 제거
+            df['pitch_vel'] = df['pitch_vel'].fillna(0)
+        else:
+            df['pitch_vel'] = np.nan
 
         # 저장
         new_path = csv_path.replace(".csv", "_augmented.csv")

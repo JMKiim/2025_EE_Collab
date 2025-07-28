@@ -1,0 +1,50 @@
+{
+  "pitch_vel": {
+    "column": "pitch_vel",
+    "type": "event",
+    "zscore": true,
+    "ymin": -5,
+    "ymax": 5,
+    "event_params": {
+      "rise_z_thresh": 2.0,
+      "fall_z_thresh": 0.0,
+      "max_duration": 0.5
+    },
+    "sync_window": 1.0
+  },
+  "bbox_area": {
+    "column": "bbox_area",
+    "type": "numeric",
+    "zscore": true,
+    "threshold_std": 1.0,
+    "ymin": -5,
+    "ymax": 5,
+    "sync_window": 1.0,
+    "sync_direction": "same"
+  },
+  "face_distance": {
+    "column": "pose_Tz",
+    "type": "numeric",
+    "zscore": true,
+    "threshold_std": 1.0,
+    "ymin": -5,
+    "ymax": 5,
+    "sync_window": 1.0,
+    "sync_direction": "same"
+  },
+  "valence_label": {
+    "column": "valence_label",
+    "type": "categorical",
+    "mapping": {
+        "positive": 1,
+        "neutral": 0,
+        "negative": -1
+    },
+    "zscore": false,
+    "threshold_std": 0.5,
+    "ymin": -2,
+    "ymax": 2,
+    "sync_window": 1.0,
+    "sync_direction": "positive"
+  }
+}
