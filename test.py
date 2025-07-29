@@ -20,7 +20,7 @@ FRAME_WIDTH = 228
 FRAME_HEIGHT = 128
 WINDOW_SECONDS = 60
 STEP_FRAMES = WINDOW_SECONDS * FPS
-OUTPUT_NAME = "T_summary_optimized.mp4"
+OUTPUT_NAME = "test.mp4"
 SHADING_FREQ = FPS  # 초당 한 번만 음영 업데이트
 
 # ----------------------------
@@ -85,27 +85,33 @@ def open_timeline_data(timeline_dir, config_path, start_frame):
     return config, global_stats, data_dict, caps, int(total_frames)
 
 # ----------------------------
-# nod 이벤트 탐지 도우미
+# nod 이벤트 탐지 (펄스 기반)
 # ----------------------------
-def detect_nod_events(arr, rise_thresh, fall_thresh, max_dur, fps):
-    # 상승 기준 초과와 하강 기준 미만 판별
-    over = arr > rise_thresh
-    under = arr < fall_thresh
-    # 시작: over rising edges
-    starts = np.where((~over[:-1]) & over[1:])[0] + 1
-    # 종료: under rising edges
-    ends = np.where((~under[:-1]) & under[1:])[0] + 1
-    max_frames = int(max_dur * fps)
+def detect_nod_events(arr, fall_thresh, rise_thresh, max_dur, min_cyc, fps):
+    # stop_thresh 파라미터는 더 이상 사용하지 않음
     mask = np.zeros_like(arr, dtype=int)
-    j = 0
-    for s in starts:
-        while j < len(ends) and ends[j] < s:
-            j += 1
-        if j >= len(ends):
-            break
-        e = ends[j]
-        if e - s <= max_frames:
-            mask[s:e+1] = 1
+    state = 'idle'
+    cycle_count = 0
+    event_start = None
+    max_frames = int(max_dur * fps)
+    for i, v in enumerate(arr):
+        if state == 'idle':
+            if v > fall_thresh:
+                state = 'down'
+                event_start = i
+        elif state == 'down':
+            if v < rise_thresh:
+                cycle_count += 1
+                if cycle_count >= min_cyc and event_start is not None and (i - event_start) <= max_frames:
+                    mask[i] = 1  # 주기 완료 시점에 펄스 마킹
+                    state = 'idle'
+                    cycle_count = 0
+                    event_start = None
+        # 최대 지속시간 초과 시 초기화
+        if event_start is not None and (i - event_start) > max_frames:
+            state = 'idle'
+            cycle_count = 0
+            event_start = None
     return mask
 
 # ----------------------------
@@ -138,7 +144,6 @@ def calculate_synchrony_mask(data_dict, config, global_stats):
             mats_below = np.vstack(mats_below)
             ext_above = np.zeros_like(mats_above, dtype=bool)
             ext_below = np.zeros_like(mats_below, dtype=bool)
-            # 과거 방향 causal 윈도우 확장
             for idx in range(mats_above.shape[0]):
                 r_ab, r_bl = mats_above[idx], mats_below[idx]
                 ext_r_ab = np.zeros_like(r_ab)
@@ -149,7 +154,6 @@ def calculate_synchrony_mask(data_dict, config, global_stats):
                     if r_bl[start_t:t+1].any(): ext_r_bl[t] = True
                 ext_above[idx] = ext_r_ab
                 ext_below[idx] = ext_r_bl
-            # sync_direction 처리
             if mode == 'any':
                 sync = ext_above.sum(axis=0) + ext_below.sum(axis=0)
             elif mode == 'same':
@@ -165,19 +169,19 @@ def calculate_synchrony_mask(data_dict, config, global_stats):
         # Event (pitch_vel nod)
         elif ctype == 'event':
             params = cfg['event_params']
-            rise = params.get('rise_z_thresh', 2.0)
-            fall = params.get('fall_z_thresh', 0.0)
+            fall = params.get('fall_z_thresh', 2.0)
+            rise = params.get('rise_z_thresh', -1.0)
             md   = params.get('max_duration', 0.5)
+            mc   = params.get('min_cycles', 2)
             mats = []
             for pid, df in data_dict.items():
                 raw = df[cfg['column']].astype(float).values
                 if cfg.get('zscore', False):
                     m, s = global_stats[pid][name]['mean'], global_stats[pid][name]['std']
                     raw = (raw - m) / s
-                mats.append(detect_nod_events(raw, rise, fall, md, FPS))
+                mats.append(detect_nod_events(raw, fall, rise, md, mc, FPS))
             mats = np.vstack(mats)
             ext = np.zeros_like(mats, dtype=bool)
-            # 과거 방향 causal 윈도우 확장
             for idx in range(mats.shape[0]):
                 r = mats[idx]
                 ext_r = np.zeros_like(r)
@@ -290,10 +294,19 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
             start_win = (f // STEP_FRAMES) * STEP_FRAMES
             end_win = min(start_win + STEP_FRAMES, ef)
             x = np.arange(start_win, end_win)
+            x_labels = [f"{int(f//(FPS*3600)):02}:{int((f//(FPS*60))%60):02}:{int((f//FPS)%60):02}" for f in x]
+
             # update lines
             for j, line in enumerate(line_objs[i]):
                 line.set_data(x, raw_vals[i][j][start_win:end_win])
+
             ax.set_xlim(start_win, end_win)
+
+            # tick 간격: 30초 간격
+            tick_step = FPS * 30
+            tick_indices = np.arange(0, len(x), tick_step)
+            ax.set_xticks(x[tick_indices])
+            ax.set_xticklabels([x_labels[i] for i in tick_indices], rotation=0)  # ⬅ 수평 출력
             # update shading
             if f % SHADING_FREQ == 0:
                 vals = sync_masks[name][start_win:end_win]
@@ -321,6 +334,6 @@ if __name__ == '__main__':
     visualize_timeline_optimized(
         timeline_dir="D:/2025신윤희Data/MediaPipe/24-1/A4/W1/T1",
         config_path="config_indicators.json",
-        start_time=1500.0,
-        end_time=1620.0
+        start_time=1500,
+        end_time=1620
     )
