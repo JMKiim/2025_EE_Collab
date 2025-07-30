@@ -24,9 +24,13 @@
 
 ### 4. `csv_preprocess.py`
 - OpenFace 결과 CSV에 다음 컬럼 추가:
-  - `bbox_area`: 얼굴 면적
-  - `emotion`: 감정 분류
-  - `mapped_emotion`: 감정 매핑 값
+  - `ME`: Motion Energy 값
+  - `ME_log`: log(ME+1) 값
+  - `bbox_area`: 얼굴 bounding box 면적
+  - `emotion`: 감정 분류 (7)
+  - `valence_label`: 감정 매핑 (positive, neutral, negative)
+  - `pitch_vel`: pitch 속도 값
+- 결과: 타임라인의 각 참가자마다 _augmented.csv 생성
 
 ### 5. `config_indicators.json`
 - 분석 지표의 임계값 및 타입 설정 (예: `numeric`, `categorical`)
