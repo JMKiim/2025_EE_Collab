@@ -212,6 +212,20 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
     colors = plt.cm.tab10.colors
 
     sync_masks = calculate_synchrony_mask(data_dict, config, global_stats)
+    
+    # 동시성 카운트 결과 CSV 저장
+    sync_csv = os.path.join(timeline_dir, 'sync_counts.csv')
+    rows = []
+    max_p = len(pids)
+    for name, mask in sync_masks.items():
+        for count in range(max_p+1):
+            rows.append({'indicator': name, 'num_participants': count, 'frame_count': int((mask==count).sum())})
+    df_sync = pd.DataFrame(rows)
+    df_sync['total_participants'] = max_p
+    df_sync['total_frames'] = sync_masks[name].shape[0]
+    df_sync.to_csv(sync_csv, index=False)
+    print(f"[완료] 동시성 결과 저장 → {sync_csv}")
+    
     raw_vals = [[None] * len(pids) for _ in indicators]
     for i, (name, icfg) in enumerate(indicators):
         for j, pid in enumerate(pids):
