@@ -20,7 +20,7 @@ FRAME_WIDTH = 228
 FRAME_HEIGHT = 128
 WINDOW_SECONDS = 60
 STEP_FRAMES = WINDOW_SECONDS * FPS
-OUTPUT_NAME = "T_summary_optimized_2.mp4"
+OUTPUT_NAME = "T_summary_2.mp4"
 SHADING_FREQ = FPS  # 초당 한 번만 음영 업데이트
 
 # ----------------------------
@@ -227,7 +227,7 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
                 arr = (arr - m) / s
             raw_vals[i][j] = arr
 
-    fig = plt.figure(figsize=(12, 6))
+    fig = plt.figure(figsize=(4, 12))
     gs = GridSpec(1 + len(indicators), len(pids), height_ratios=[1] + [0.7] * len(indicators))
     ims = []
     for idx, pid in enumerate(pids):

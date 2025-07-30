@@ -33,6 +33,26 @@
     "sync_window": 1.0,
     "sync_direction": "same"
   },
+  "motion_energy": {
+    "column": "ME",
+    "type": "numeric",
+    "zscore": true,
+    "threshold_std": 1.0,
+    "ymin": -5,
+    "ymax": 5,
+    "sync_window": 1.0,
+    "sync_direction": "positive"
+  },
+  "motion_energy_log": {
+    "column": "ME_log",
+    "type": "numeric",
+    "zscore": true,
+    "threshold_std": 1.0,
+    "ymin": -5,
+    "ymax": 5,
+    "sync_window": 1.0,
+    "sync_direction": "positive"
+  },
   "valence_label": {
     "column": "valence_label",
     "type": "categorical",
