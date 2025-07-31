@@ -13,6 +13,19 @@ from threading import Thread
 from queue import Queue, Empty
 
 # ----------------------------
+# 글로벌 폰트 설정 (전체 폰트 크기 축소)
+# ----------------------------
+plt.rcParams.update({
+    'font.size': 8,              # 기본 폰트 크기
+    'axes.titlesize': 8,         # 서브플롯 제목
+    'axes.labelsize': 8,         # 축 레이블
+    'xtick.labelsize': 8,        # x축 눈금 레이블
+    'ytick.labelsize': 8,        # y축 눈금 레이블
+    'legend.fontsize': 8,        # 범례
+    'figure.titlesize': 10       # 전체 figure 제목 (없을 경우 무시)
+})
+
+# ----------------------------
 # 설정
 # ----------------------------
 FPS = 15
@@ -241,7 +254,7 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
                 arr = (arr - m) / s
             raw_vals[i][j] = arr
 
-    fig = plt.figure(figsize=(4, 12))
+    fig = plt.figure(figsize=(9, 12))
     gs = GridSpec(1 + len(indicators), len(pids), height_ratios=[1] + [0.7] * len(indicators))
     ims = []
     for idx, pid in enumerate(pids):

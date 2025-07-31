@@ -13,14 +13,27 @@ from threading import Thread
 from queue import Queue, Empty
 
 # ----------------------------
+# 글로벌 폰트 설정 (전체 폰트 크기 축소)
+# ----------------------------
+plt.rcParams.update({
+    'font.size': 8,              # 기본 폰트 크기
+    'axes.titlesize': 8,         # 서브플롯 제목
+    'axes.labelsize': 8,         # 축 레이블
+    'xtick.labelsize': 8,        # x축 눈금 레이블
+    'ytick.labelsize': 8,        # y축 눈금 레이블
+    'legend.fontsize': 8,        # 범례
+    'figure.titlesize': 10       # 전체 figure 제목 (없을 경우 무시)
+})
+
+# ----------------------------
 # 설정
 # ----------------------------
 FPS = 15
 FRAME_WIDTH = 228
 FRAME_HEIGHT = 128
-WINDOW_SECONDS = 60
+WINDOW_SECONDS = 120
 STEP_FRAMES = WINDOW_SECONDS * FPS
-OUTPUT_NAME = "T_summary_2.mp4"
+OUTPUT_NAME = "T_summary.mp4"
 SHADING_FREQ = FPS  # 초당 한 번만 음영 업데이트
 
 # ----------------------------
@@ -212,6 +225,20 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
     colors = plt.cm.tab10.colors
 
     sync_masks = calculate_synchrony_mask(data_dict, config, global_stats)
+    
+    # 동시성 카운트 결과 CSV 저장
+    sync_csv = os.path.join(timeline_dir, 'sync_counts.csv')
+    rows = []
+    max_p = len(pids)
+    for name, mask in sync_masks.items():
+        for count in range(max_p+1):
+            rows.append({'indicator': name, 'num_participants': count, 'frame_count': int((mask==count).sum())})
+    df_sync = pd.DataFrame(rows)
+    df_sync['total_participants'] = max_p
+    df_sync['total_frames'] = sync_masks[name].shape[0]
+    df_sync.to_csv(sync_csv, index=False)
+    print(f"[완료] 동시성 결과 저장 → {sync_csv}")
+    
     raw_vals = [[None] * len(pids) for _ in indicators]
     for i, (name, icfg) in enumerate(indicators):
         for j, pid in enumerate(pids):
@@ -227,7 +254,7 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
                 arr = (arr - m) / s
             raw_vals[i][j] = arr
 
-    fig = plt.figure(figsize=(4, 12))
+    fig = plt.figure(figsize=(9, 12))
     gs = GridSpec(1 + len(indicators), len(pids), height_ratios=[1] + [0.7] * len(indicators))
     ims = []
     for idx, pid in enumerate(pids):
@@ -334,6 +361,6 @@ if __name__ == '__main__':
     visualize_timeline_optimized(
         timeline_dir="D:/2025신윤희Data/MediaPipe/24-1/A4/W1/T1",
         config_path="config_indicators.json",
-        start_time=1500,
-        end_time=1620
+        start_time=None,
+        end_time=None
     )

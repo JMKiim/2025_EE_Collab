@@ -13,6 +13,26 @@
     },
     "sync_window": 2.0
   },
+  "face_yaw": {
+    "column": "pose_Ry",
+    "type": "numeric",
+    "zscore": true,
+    "threshold_std": 1.0,
+    "ymin": -5,
+    "ymax": 5,
+    "sync_window": 1.0,
+    "sync_direction": "any"
+  },
+  "face_roll": {
+    "column": "pose_Rz",
+    "type": "numeric",
+    "zscore": true,
+    "threshold_std": 1.0,
+    "ymin": -5,
+    "ymax": 5,
+    "sync_window": 1.0,
+    "sync_direction": "any"
+  },
   "bbox_area": {
     "column": "bbox_area",
     "type": "numeric",
