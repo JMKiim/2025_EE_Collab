@@ -33,7 +33,7 @@ FRAME_WIDTH = 228
 FRAME_HEIGHT = 128
 WINDOW_SECONDS = 120
 STEP_FRAMES = WINDOW_SECONDS * FPS
-OUTPUT_NAME = "T_summary.mp4"
+OUTPUT_NAME = "T_Summary_2.mp4"
 SHADING_FREQ = FPS  # 초당 한 번만 음영 업데이트
 
 # ----------------------------
@@ -254,7 +254,7 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
                 arr = (arr - m) / s
             raw_vals[i][j] = arr
 
-    fig = plt.figure(figsize=(9, 12))
+    fig = plt.figure(figsize=(16, 9))
     gs = GridSpec(1 + len(indicators), len(pids), height_ratios=[1] + [0.7] * len(indicators))
     ims = []
     for idx, pid in enumerate(pids):
@@ -329,8 +329,8 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
 
             ax.set_xlim(start_win, end_win)
 
-            # tick 간격: 30초 간격
-            tick_step = FPS * 30
+            # tick 간격: 10초 간격
+            tick_step = FPS * 10
             tick_indices = np.arange(0, len(x), tick_step)
             ax.set_xticks(x[tick_indices])
             ax.set_xticklabels([x_labels[i] for i in tick_indices], rotation=0)  # ⬅ 수평 출력
