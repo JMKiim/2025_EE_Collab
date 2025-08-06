@@ -40,6 +40,20 @@ def get_crop_coords(num_people, width, height):
             (half_w, 0, width - half_w, half_h),            # 우상
             ((width - half_w) // 2, half_h, half_w, height - half_h)  # 중앙 하단
         ]
+    elif num_people == 5:
+        w = int(width * 0.325)
+        h = int(height * 0.325)
+        top_left_w    = width/2 - (3*w)/2
+        top_left_h    = height/2 - h
+        bottom_left_w = width/2 - w
+        mid_y         = height/2
+        return [
+            (int(top_left_w),           int(top_left_h),     w, h),  # P1: 상단 왼쪽
+            (int(top_left_w) + w,       int(top_left_h),     w, h),  # P2: 상단 중앙
+            (int(top_left_w) + 2 * w,   int(top_left_h),     w, h),  # P3: 상단 오른쪽
+            (int(bottom_left_w),        int(mid_y),          w, h),  # P4: 하단 왼쪽
+            (int(width/2),              int(mid_y),          w, h)   # P5: 하단 오른쪽
+        ]
     else:
         print(f"[경고] 인원 수 {num_people}명에 대한 crop 규칙이 정의되어 있지 않음")
         return None
