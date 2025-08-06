@@ -1,6 +1,7 @@
 import os
 import shutil
 import sys
+import argparse
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from process_single_video import process_video
 
@@ -13,23 +14,34 @@ NUM_WORKERS = 4
 SKIP_LOG = []
 FAIL_LOG = []
 
+# -------------------------------
+# GPU 상태 확인
+# -------------------------------
 def check_gpu_status():
     try:
+        import os
+        os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
         import tensorflow as tf
         gpus = tf.config.list_physical_devices('GPU')
         if gpus:
             print(f"[INFO] GPU 사용 가능: {[gpu.name for gpu in gpus]}")
         else:
             print("[경고] GPU를 찾지 못함 → CPU fallback 가능성 있음")
-    except ImportError:
-        print("[경고] TensorFlow 설치 안됨 → GPU 여부 확인 불가")
+    except Exception as e:
+        print(f"[경고] GPU 상태 체크 실패: {e} (계속 진행)")
 
+# -------------------------------
+# 출력 폴더 초기화
+# -------------------------------
 def clear_output_folder():
     if os.path.exists(OUTPUT_ROOT):
         print(f"[INFO] 기존 출력 폴더 삭제: {OUTPUT_ROOT}")
         shutil.rmtree(OUTPUT_ROOT)
     os.makedirs(OUTPUT_ROOT, exist_ok=True)
 
+# -------------------------------
+# 입력 영상 찾기
+# -------------------------------
 def find_all_timeline_videos():
     tasks = []
     for semester in SEMESTERS:
@@ -53,57 +65,73 @@ def find_all_timeline_videos():
 
                     base = os.path.splitext(file)[0]
                     if "_T" not in base or "_P" not in base:
-                        print(f"[무시됨] 이름 형식 불일치: {file}")
                         continue
 
                     try:
                         group_name, week_name, timeline, _ = base.split("_")
                         timeline_idx = timeline[1:]
                     except:
-                        print(f"[이름 파싱 실패] {file}")
                         continue
 
                     input_path = os.path.join(week_path, file)
                     output_dir = os.path.join(OUTPUT_ROOT, semester, group_name, week_name, f"T{timeline_idx}")
                     tasks.append((input_path, output_dir))
-
     return tasks
 
+# -------------------------------
+# 안전 처리: 누락된 경우에만 실행
+# -------------------------------
 def safe_process(task):
     input_path, output_dir = task
+    # 입력이 없으면 스킵
     if not os.path.isfile(input_path):
         SKIP_LOG.append(input_path)
-        print(f"[스킵] 파일 없음: {input_path}")
         return
+    # 이미 처리된 타임라인이면 스킵
+    if os.path.isdir(output_dir) and os.listdir(output_dir):
+        print(f"[스킵] 이미 처리된 타임라인: {output_dir}")
+        return
+    # 처리
     try:
         process_video((input_path, output_dir))
     except Exception as e:
         FAIL_LOG.append(input_path)
         print(f"[실패] {input_path} → {e}")
 
-if __name__ == "__main__":
-    check_gpu_status()
-    clear_output_folder()
+# -------------------------------
+# 명령행 인자
+# -------------------------------
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run OpenFace over cropped individual videos.")
+    parser.add_argument("--clear", "-c", action="store_true",
+                        help="If set, clear the output root before processing (default: keep existing).")
+    return parser.parse_args()
 
-    all_tasks = find_all_timeline_videos()
-    print(f"[INFO] 총 {len(all_tasks)}개 비디오를 병렬({NUM_WORKERS}) 처리합니다.\n")
+# -------------------------------
+# 메인
+# -------------------------------
+if __name__ == "__main__":
+    args = parse_args()
+    check_gpu_status()
+    if args.clear:
+        clear_output_folder()
+    else:
+        os.makedirs(OUTPUT_ROOT, exist_ok=True)
+
+    tasks = find_all_timeline_videos()
+    print(f"[INFO] 총 {len(tasks)}개 비디오 중 누락된 것만 처리합니다. (병렬 {NUM_WORKERS} workers)")
 
     try:
         with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
-            futures = [executor.submit(safe_process, task) for task in all_tasks]
+            futures = [executor.submit(safe_process, t) for t in tasks]
             for future in as_completed(futures):
                 future.result()
     except KeyboardInterrupt:
-        print("\n[종료 요청됨] Ctrl+C 입력 감지 → 즉시 중단")
-        executor.shutdown(wait=False, cancel_futures=True)
+        print("[종료 요청됨] Ctrl+C 감지")
         sys.exit(1)
 
-    print("\n[전체 처리 완료]")
+    print("[전체 처리 완료]")
     if SKIP_LOG:
-        print(f"\n[스킵된 {len(SKIP_LOG)}개 파일]")
-        for path in SKIP_LOG:
-            print(" -", path)
+        print(f"[스킵된 {len(SKIP_LOG)}개 입력]")
     if FAIL_LOG:
-        print(f"\n[실패한 {len(FAIL_LOG)}개 파일]")
-        for path in FAIL_LOG:
-            print(" -", path)
+        print(f"[실패한 {len(FAIL_LOG)}개 입력]")
