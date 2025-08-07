@@ -83,7 +83,7 @@ def run_ffmpeg_crop(input_path, x, y, w, h, output_path):
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 # -------------------------------
-# 보조: 타임라인+crop 개별 생성 (누락된 것만)
+# 보조: 타임라인+crop 개별 생성 (수정된 로직)
 # -------------------------------
 
 def ensure_timeline_and_crops(group, week, version, t_idx, n_people, input_path, start, end, out_folder):
@@ -91,12 +91,16 @@ def ensure_timeline_and_crops(group, week, version, t_idx, n_people, input_path,
     timeline_name = f"{folder_name}_T{t_idx}.mp4"
     timeline_path = os.path.join(out_folder, timeline_name)
 
-    # 1. 타임라인 컷 생성 (없으면)
-    if not os.path.exists(timeline_path):
-        print(f"[생성] 타임라인 컷 만들기: {timeline_name}")
-        run_ffmpeg_cut(input_path, start, end, timeline_path)
-    else:
-        print(f"[스킵] 이미 존재하는 타임라인: {timeline_name}")
+    # 핵심 수정: 타임라인 영상이 존재하면, 모든 작업을 건너뛰고 함수를 즉시 종료합니다.
+    if os.path.exists(timeline_path):
+        print(f"[스킵] 메인 타임라인({timeline_name})이 이미 존재하여 모든 관련 작업을 건너뜁니다.")
+        return # 여기서 함수가 완전히 종료됨
+
+    # --- 아래 코드는 타임라인 영상이 존재하지 않을 때만 실행됩니다 ---
+
+    # 1. 타임라인 컷 생성 (존재 여부 재확인 불필요)
+    print(f"[생성] 타임라인 컷 만들기: {timeline_name}")
+    run_ffmpeg_cut(input_path, start, end, timeline_path)
 
     # 2. crop 생성 (각 participant)
     try:
@@ -112,11 +116,10 @@ def ensure_timeline_and_crops(group, week, version, t_idx, n_people, input_path,
     for pid, (x, y, w, h) in enumerate(coords, start=1):
         crop_name = f"{folder_name}_T{t_idx}_P{pid}.mp4"
         crop_path = os.path.join(out_folder, crop_name)
-        if not os.path.exists(crop_path):
-            print(f"[생성] crop 영상 만들기: {crop_name}")
-            run_ffmpeg_crop(timeline_path, x, y, w, h, crop_path)
-        else:
-            print(f"[스킵] 이미 존재하는 crop: {crop_name}")
+        
+        # 핵심 수정: 크롭 영상의 존재 여부를 묻지 않고 항상 생성(덮어쓰기)합니다.
+        print(f"[생성] crop 영상 만들기: {crop_name}")
+        run_ffmpeg_crop(timeline_path, x, y, w, h, crop_path)
 
 # -------------------------------
 # 메인 처리 루프
