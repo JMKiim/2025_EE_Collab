@@ -254,7 +254,7 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
                 arr = (arr - m) / s
             raw_vals[i][j] = arr
 
-    fig = plt.figure(figsize=(16, 9))
+    fig = plt.figure(figsize=(9, 18))
     gs = GridSpec(1 + len(indicators), len(pids), height_ratios=[1] + [0.7] * len(indicators))
     ims = []
     for idx, pid in enumerate(pids):
