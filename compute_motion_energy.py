@@ -18,7 +18,7 @@ NUM_WORKERS = 4
 # Motion Energy 스크립트 옵션
 SAVE_GRAYSCALE_VIDEO = True      # True로 설정하면 그레이스케일 영상(mp4)도 함께 저장
 ENABLE_MOTION_COMP = False     # True로 설정하면 전역 이동 보정 적용
-REPROCESS_EXISTING = True        # True로 설정하면 이미 처리된 파일도 다시 계산 (덮어쓰기)
+REPROCESS_EXISTING = False        # True로 설정하면 이미 처리된 파일도 다시 계산 (덮어쓰기)
 VIDEO_CODEC = cv2.VideoWriter_fourcc(*'mp4v')
 
 # ----------------------------

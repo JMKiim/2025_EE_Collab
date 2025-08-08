@@ -4,8 +4,8 @@ import re
 import cv2
 import numpy as np
 import pandas as pd
-from concurrent.futures import ProcessPoolExecutor, as_completed
-# DeepFace 라이브러리 추가
+from concurrent.futures import ThreadPoolExecutor, as_completed
+# DeepFace 라이브러리
 from deepface import DeepFace
 
 # ----------------------------
@@ -15,12 +15,11 @@ INPUT_ROOT = "D:/2025신윤희영상정렬"
 OUTPUT_ROOT = "D:/2025신윤희Data/MediaPipe"
 SEMESTERS = ["23-2", "24-1", "24-2"]
 VIDEO_EXTENSIONS = [".mp4", ".mov", ".mkv"]
-NUM_WORKERS = 4 # CPU 코어 수와 컴퓨터 사양에 맞춰 조절하세요
+NUM_WORKERS = 4  # CPU 코어 수에 맞춰 조절하세요
 
-# DeepFace 스크립트 옵션
-# 분석할 항목을 리스트로 지정합니다. ('emotion', 'age', 'gender', 'race')
+# 분석할 항목
 DEEPFACE_ACTIONS = ['emotion', 'age', 'gender', 'race']
-REPROCESS_EXISTING = True  # True로 설정하면 이미 처리된 파일도 다시 계산 (덮어쓰기)
+REPROCESS_EXISTING = False  # True면 기존 결과 덮어쓰기
 
 # ----------------------------
 # 로그 저장용
@@ -29,7 +28,7 @@ SKIP_LOG = []
 FAIL_LOG = []
 
 # ----------------------------
-# 처리할 비디오 목록 생성 (기존 코드와 동일)
+# 비디오 목록 생성
 # ----------------------------
 def find_all_videos():
     tasks = []
@@ -52,9 +51,7 @@ def find_all_videos():
                 for fname in os.listdir(week_dir):
                     if not any(fname.endswith(ext) for ext in VIDEO_EXTENSIONS):
                         continue
-                    base_name = os.path.splitext(fname)[0]
-                    name_parts = base_name.split('_')
-                    # 개인 비디오만 처리: 마지막 파트가 'P숫자' 패턴
+                    name_parts = os.path.splitext(fname)[0].split('_')
                     if not re.match(r'^P\d+$', name_parts[-1]):
                         continue
                     if len(name_parts) < 3:
@@ -66,7 +63,7 @@ def find_all_videos():
     return tasks
 
 # ----------------------------
-# DeepFace 분석 함수 (핵심 수정 부분)
+# DeepFace 분석 함수
 # ----------------------------
 def compute_deepface_analysis(video_path, output_dir):
     cap = cv2.VideoCapture(video_path)
@@ -84,27 +81,18 @@ def compute_deepface_analysis(video_path, output_dir):
         ret, frame = cap.read()
         if not ret:
             break
-        
         frame_count += 1
-        
-        # BGR 이미지를 RGB로 변환 (DeepFace는 RGB를 선호)
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
         try:
-            # DeepFace로 현재 프레임 분석
-            # enforce_detection=False는 얼굴을 못찾아도 오류를 내지 않음
             result = DeepFace.analyze(
                 img_path=rgb_frame,
                 actions=DEEPFACE_ACTIONS,
                 enforce_detection=False,
-                silent=True # 불필요한 내부 로그 숨기기
+                silent=True
             )
-
-            # result는 리스트 형태, 첫 번째 감지된 얼굴 정보만 사용
             if result and isinstance(result, list):
-                # 분석 결과를 한 줄의 딕셔너리로 만듦
                 face_data = result[0]
-                
                 row = {
                     'face_detected': True,
                     'age': face_data.get('age'),
@@ -112,35 +100,24 @@ def compute_deepface_analysis(video_path, output_dir):
                     'dominant_emotion': face_data.get('dominant_emotion'),
                     'dominant_race': face_data.get('dominant_race')
                 }
-                # 각 감정의 점수를 개별 컬럼으로 추가
                 if 'emotion' in face_data:
-                    for emotion, score in face_data['emotion'].items():
-                        row[f'emotion_{emotion}'] = score
-                
+                    for emo, score in face_data['emotion'].items():
+                        row[f'emotion_{emo}'] = score
                 analysis_results.append(row)
             else:
-                # 얼굴이 감지되지 않은 경우
                 analysis_results.append({'face_detected': False})
-
         except Exception as e:
-            # 특정 프레임 분석 실패 시
             print(f"  - Frame {frame_count} 분석 실패: {e}")
             analysis_results.append({'face_detected': False})
 
     cap.release()
-
     if not analysis_results:
-        print(f"[WARN] 비디오에서 어떤 프레임도 처리되지 않았습니다: {video_path}")
+        print(f"[WARN] 처리된 프레임이 없습니다: {video_path}")
         return
 
-    # DataFrame 생성 및 저장
     df = pd.DataFrame(analysis_results)
-    
-    # 프레임 번호와 타임스탬프 컬럼 추가
     df['frame'] = list(range(1, len(df) + 1))
     df['timestamp'] = df['frame'] / fps
-    
-    # 컬럼 순서 재정렬 (프레임, 타임스탬프를 맨 앞으로)
     cols = ['frame', 'timestamp', 'face_detected'] + [c for c in df.columns if c not in ['frame', 'timestamp', 'face_detected']]
     df = df[cols]
 
@@ -148,83 +125,52 @@ def compute_deepface_analysis(video_path, output_dir):
     df.to_csv(out_csv, index=False, float_format='%.4f')
     print(f"[INFO] Saved DeepFace CSV: {out_csv}")
 
-
 # ----------------------------
-# 안전 처리 래퍼 (저장 파일명만 수정)
+# 안전 처리 래퍼
 # ----------------------------
 def safe_process(task):
     video_path, output_dir = task
     base_name = os.path.splitext(os.path.basename(video_path))[0]
-    out_csv = os.path.join(output_dir, f"{base_name}_deepface.csv") # <--- 파일명 수정
+    out_csv = os.path.join(output_dir, f"{base_name}_deepface.csv")
 
     if not os.path.isfile(video_path):
         SKIP_LOG.append(video_path)
-        print(f"[스킵] 파일 없음: {video_path}")
+        print(f"[SKIP] 파일 없음: {video_path}")
         return
-
     if os.path.exists(out_csv):
         if REPROCESS_EXISTING:
-            print(f"[재처리] 이미 처리된 파일: {video_path} (덮어쓰기)")
-            try:
-                os.remove(out_csv)
-            except Exception:
-                pass
+            os.remove(out_csv)
         else:
             SKIP_LOG.append(video_path)
-            print(f"[스킵] 이미 처리됨: {video_path}")
             return
-            
     try:
-        # compute_me 대신 새로운 함수 호출
         compute_deepface_analysis(video_path, output_dir)
     except Exception as e:
-        FAIL_LOG.append(video_path)
-        print(f"[실패] {video_path} → {e}")
-
+        FAIL_LOG.append((video_path, str(e)))
+        print(f"[FAIL] {video_path} → {e}")
 
 # ----------------------------
-# 메인 실행 (기존 코드와 동일)
+# 메인 실행
 # ----------------------------
 def main():
     tasks = find_all_videos()
     if not tasks:
-        print("[INFO] 처리할 비디오를 찾지 못했습니다. INPUT_ROOT 경로와 파일 구조를 확인하세요.")
+        print("[INFO] 처리할 비디오가 없습니다.")
         return
-        
-    print(f"[INFO] 총 {len(tasks)}개 개인 비디오를 병렬({NUM_WORKERS}) 처리합니다.")
-    
-    # DeepFace 모델을 처음 실행 시 다운로드하므로, 메인 프로세스에서 미리 로드.
-    # 병렬 처리 시 각 자식 프로세스가 모델을 로드하는 오버헤드를 줄일 수 있습니다.
-    try:
-        print("[INFO] DeepFace 모델을 미리 로딩합니다. 시간이 걸릴 수 있습니다...")
-        DeepFace.build_model("Emotion")
-        print("[INFO] 모델 로딩 완료.")
-    except Exception as e:
-        print(f"[WARN] 모델 사전 로딩 실패: {e}")
+    print(f"[INFO] 총 {len(tasks)}개 비디오 병렬 처리 시작 ({NUM_WORKERS} workers)")
+    with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
+        futures = [executor.submit(safe_process, t) for t in tasks]
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Worker exception: {e}")
 
-    try:
-        with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
-            futures = [executor.submit(safe_process, t) for t in tasks]
-            for future in as_completed(futures):
-                try:
-                    future.result()
-                except Exception as e:
-                    print(f"A worker process raised an exception: {e}")
-
-    except KeyboardInterrupt:
-        print("\n[종료 요청됨] Ctrl+C 입력 감지 → 즉시 중단")
-        executor.shutdown(wait=False, cancel_futures=True)
-        sys.exit(1)
-
-    print("\n[전체 처리 완료]")
+    print("[COMPLETE]")
     if SKIP_LOG:
-        print(f"\n[스킵된 {len(SKIP_LOG)}개 개인 비디오]")
-        for p in SKIP_LOG:
-            print(" -", p)
+        print(f"[SKIP] {len(SKIP_LOG)}개 파일")
     if FAIL_LOG:
-        print(f"\n[실패한 {len(FAIL_LOG)}개 개인 비디오]")
-        for p in FAIL_LOG:
-            print(" -", p)
+        print(f"[FAIL] {len(FAIL_LOG)}개 파일 실패")
 
 if __name__ == '__main__':
     main()
