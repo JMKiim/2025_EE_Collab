@@ -79,18 +79,26 @@ def find_all_timeline_videos():
     return tasks
 
 # -------------------------------
-# 안전 처리: 누락된 경우에만 실행
+# 안전 처리: 누락된 경우에만 실행 (수정된 함수)
 # -------------------------------
 def safe_process(task):
     input_path, output_dir = task
+
+    # 주요 수정 사항 1: 예상되는 '개별 출력 파일'의 전체 경로를 계산합니다.
+    # (결과물이 .csv 파일로 저장된다고 가정)
+    input_basename = os.path.splitext(os.path.basename(input_path))[0]
+    expected_output_file = os.path.join(output_dir, f"{input_basename}.csv")
+
     # 입력이 없으면 스킵
     if not os.path.isfile(input_path):
         SKIP_LOG.append(input_path)
         return
-    # 이미 처리된 타임라인이면 스킵
-    if os.path.isdir(output_dir) and os.listdir(output_dir):
-        print(f"[스킵] 이미 처리된 타임라인: {output_dir}")
+    
+    # 주요 수정 사항 2: 스킵 조건을 '폴더'가 아닌 '개별 파일'의 존재 여부로 변경합니다.
+    if os.path.exists(expected_output_file):
+        print(f"[스킵] 이미 처리된 파일: {expected_output_file}")
         return
+    
     # 처리
     try:
         process_video((input_path, output_dir))
