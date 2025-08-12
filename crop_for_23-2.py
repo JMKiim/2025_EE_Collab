@@ -11,22 +11,22 @@ from tqdm import tqdm
 BASE_PATH = "D:/2025신윤희영상정렬/23-2"
 
 # 2. 작업하려는 그룹명과 주차를 지정합니다.
-GROUP_NAME = "B"  # 예: "A", "B", "C" 등
-WEEK = "4W"       # 예: "1W", "2W", "3W", "4W"
+GROUP_NAME = "G"  # 예: "A", "B", "C" 등
+WEEK = "1W"       # 예: "1W", "2W", "3W", "4W"
 
 # 3. 각 조원의 영상에서 자를 부분(타임라인) 정보를 입력합니다.
 timeline_data = {
     1: [
-        {'start': '00:04:37', 'end': '00:51:11', 'timeline_num': 1}
+        {'start': '00:11:39', 'end': '00:59:36', 'timeline_num': 1}
     ],
     2: [
-        {'start': '00:08:45', 'end': '00:55:19', 'timeline_num': 1}
+        {'start': '00:12:58', 'end': '01:00:55', 'timeline_num': 1}
     ],
     3: [
-        {'start': '00:07:16', 'end': '00:53:50', 'timeline_num': 1}
+        {'start': '00:12:38', 'end': '01:00:35', 'timeline_num': 1}
     ],
     4: [
-        {'start': '00:08:09', 'end': '00:54:43', 'timeline_num': 1}
+        {'start': '00:04:08', 'end': '00:52:05', 'timeline_num': 2}
     ]
 }
 

@@ -225,19 +225,77 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
     colors = plt.cm.tab10.colors
 
     sync_masks = calculate_synchrony_mask(data_dict, config, global_stats)
-    
-    # 동시성 카운트 결과 CSV 저장
+
+    # ----------------------------
+    # 동시성 카운트 결과 CSV 저장 (wide format)
+    # ----------------------------
     sync_csv = os.path.join(timeline_dir, 'sync_counts.csv')
-    rows = []
     max_p = len(pids)
-    for name, mask in sync_masks.items():
-        for count in range(max_p+1):
-            rows.append({'indicator': name, 'num_participants': count, 'frame_count': int((mask==count).sum())})
-    df_sync = pd.DataFrame(rows)
-    df_sync['total_participants'] = max_p
-    df_sync['total_frames'] = sync_masks[name].shape[0]
-    df_sync.to_csv(sync_csv, index=False)
+
+    # 1) indicator × (0~max_p) wide table 생성
+    sync_counts = {
+        name: [int((mask == i).sum()) for i in range(max_p + 1)]
+        for name, mask in sync_masks.items()
+    }
+    df_sync = pd.DataFrame.from_dict(
+        sync_counts, orient='index',
+        columns=[str(i) for i in range(max_p + 1)]
+    )
+    df_sync.index.name = 'indicator'
+    df_sync.to_csv(sync_csv, encoding='utf-8')
     print(f"[완료] 동시성 결과 저장 → {sync_csv}")
+
+    # ----------------------------
+    # 메타 정보 CSV 저장
+    # ----------------------------
+    meta_csv = os.path.join(timeline_dir, 'sync_counts_meta.csv')
+    with open(meta_csv, 'w', encoding='utf-8') as mf:
+        mf.write("total_participants,total_frames\n")
+        mf.write(f"{max_p},{total_frames}\n")
+    print(f"[완료] 메타 정보 저장 → {meta_csv}")
+
+    # ----------------------------
+    # 프레임별 개별 행동 마스크 CSV 저장
+    # ----------------------------
+    mask_csv = os.path.join(timeline_dir, 'sync_mask.csv')
+    mask_dict = {}
+    # 각 지표·참여자별 mask 배열 생성
+    for name, cfg in config.items():
+        col = cfg['column']
+        for pid, df in data_dict.items():
+            # raw 값 추출
+            if cfg['type'] == 'numeric':
+                arr = df[col].astype(float).values
+                if cfg.get('zscore', False):
+                    m = global_stats[pid][name]['mean']
+                    s = global_stats[pid][name]['std']
+                    arr = (arr - m) / s
+                mask = arr > cfg.get('threshold_std', 2.0)
+            elif cfg['type'] == 'categorical':
+                raw = df[col].fillna('neutral')
+                mapped = raw.map(cfg['mapping']).fillna(0).astype(bool)
+                mask = mapped.values
+            else:  # event
+                arr = df[col].astype(float).values
+                raw = arr
+                if cfg.get('zscore', False):
+                    m = global_stats[pid][name]['mean']
+                    s = global_stats[pid][name]['std']
+                    raw = (arr - m) / s
+                mask = detect_nod_events(raw,
+                                         cfg['event_params']['fall_z_thresh'],
+                                         cfg['event_params']['rise_z_thresh'],
+                                         cfg['event_params']['max_duration'],
+                                         cfg['event_params']['min_cycles'],
+                                         FPS).astype(bool)
+            mask_dict[(name, pid)] = mask.astype(int)
+    # DataFrame 생성 및 저장
+    mask_df = pd.DataFrame(mask_dict)
+    mask_df.index.name = 'frame'
+    mask_df.columns = pd.MultiIndex.from_tuples(mask_df.columns, names=['indicator','pid'])
+    mask_df.to_csv(mask_csv)
+    print(f"[완료] 프레임별 행동 마스크 (벡터화) → {mask_csv}")
+
     
     raw_vals = [[None] * len(pids) for _ in indicators]
     for i, (name, icfg) in enumerate(indicators):
