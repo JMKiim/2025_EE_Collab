@@ -12,6 +12,8 @@ from tqdm import tqdm
 from threading import Thread
 from queue import Queue, Empty
 
+MAKE_VIDEO = False  # ← 여기만 True/False로 바꿔 쓰면 됨
+
 # ----------------------------
 # 글로벌 폰트 설정 (전체 폰트 크기 축소)
 # ----------------------------
@@ -33,7 +35,7 @@ FRAME_WIDTH = 228
 FRAME_HEIGHT = 128
 WINDOW_SECONDS = 60
 STEP_FRAMES = WINDOW_SECONDS * FPS
-OUTPUT_NAME = "test2.mp4"
+OUTPUT_NAME = "test.mp4"
 SHADING_FREQ = FPS  # 초당 한 번만 음영 업데이트
 
 # ----------------------------
@@ -86,14 +88,16 @@ def open_timeline_data(timeline_dir, config_path, start_frame):
         df = pd.read_csv(os.path.join(timeline_dir, fname))
         data_dict[pid] = df
         total_frames = min(total_frames, len(df))
-        base = fname.replace('_augmented.csv','')
-        for ext in ('.mp4', '.avi'):
-            path = os.path.join(timeline_dir, base + ext)
-            if os.path.isfile(path):
-                cap = cv2.VideoCapture(path)
-                cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-                caps[pid] = FrameLoader(cap)
-                break
+
+        if MAKE_VIDEO:
+            base = fname.replace('_augmented.csv','')
+            for ext in ('.mp4', '.avi'):
+                path = os.path.join(timeline_dir, base + ext)
+                if os.path.isfile(path):
+                    cap = cv2.VideoCapture(path)
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+                    caps[pid] = FrameLoader(cap)
+                    break
     print(f"[TIME] Data loading: {time.time() - start:.2f}s")
     return config, global_stats, data_dict, caps, int(total_frames)
 
@@ -215,11 +219,13 @@ def calculate_synchrony_mask(data_dict, config, global_stats):
 def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end_time=None):
     total_start = time.time()
     sf = 0 if start_time is None else int(start_time * FPS)
+
     config, global_stats, data_dict, caps, total_frames = open_timeline_data(timeline_dir, config_path, sf)
     ef = min(int(end_time * FPS), total_frames) if end_time else total_frames
     if not data_dict:
         print('[SKIP] No data')
         return
+    
     pids = list(data_dict.keys())
     indicators = list(config.items())
     colors = plt.cm.tab10.colors
@@ -296,6 +302,10 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
     mask_df.to_csv(mask_csv)
     print(f"[완료] 프레임별 행동 마스크 (벡터화) → {mask_csv}")
 
+    # 여기서 영상 OFF면 바로 종료
+    if not MAKE_VIDEO:
+        print("[정보] MAKE_VIDEO=False: 시각화 영상 렌더링을 건너뜁니다.")
+        return
     
     raw_vals = [[None] * len(pids) for _ in indicators]
     for i, (name, icfg) in enumerate(indicators):
