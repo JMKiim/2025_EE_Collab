@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import re
 from matplotlib.animation import FFMpegWriter
 from matplotlib.gridspec import GridSpec
 from matplotlib.colors import to_rgba
@@ -11,6 +12,7 @@ import time
 from tqdm import tqdm
 from threading import Thread
 from queue import Queue, Empty
+from openpyxl.styles import PatternFill, Font
 
 MAKE_VIDEO = False  # ← 여기만 True/False로 바꿔 쓰면 됨
 
@@ -232,24 +234,59 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
 
     sync_masks = calculate_synchrony_mask(data_dict, config, global_stats)
 
+    # 사용자가 직접 지정할 하이라이트 지표 리스트 (원하는 지표명을 추가)
+    HIGHLIGHT_INDICATORS = [
+        "face_distance"
+    ]
+
     # ----------------------------
     # 동시성 카운트 결과 CSV 저장 (wide format)
     # ----------------------------
-    sync_csv = os.path.join(timeline_dir, 'sync_counts.csv')
+    # sync_csv = os.path.join(timeline_dir, 'sync_counts.csv')
+    # max_p = len(pids)
+
+    # # 1) indicator × (0~max_p) wide table 생성
+    # sync_counts = {
+    #     name: [int((mask == i).sum()) for i in range(max_p + 1)]
+    #     for name, mask in sync_masks.items()
+    # }
+    # df_sync = pd.DataFrame.from_dict(
+    #     sync_counts, orient='index',
+    #     columns=[str(i) for i in range(max_p + 1)]
+    # )
+    # df_sync.index.name = 'indicator'
+    # df_sync.to_csv(sync_csv, encoding='utf-8')
+    # print(f"[완료] 동시성 결과 저장 → {sync_csv}")
+
+    def _sanitize_sheet_name(name: str) -> str:
+        return re.sub(r'[:\\/?*\[\]]', '_', str(name))[:31]
+
+    sync_xlsx = os.path.join(timeline_dir, 'sync_counts.xlsx')
     max_p = len(pids)
 
-    # 1) indicator × (0~max_p) wide table 생성
-    sync_counts = {
-        name: [int((mask == i).sum()) for i in range(max_p + 1)]
-        for name, mask in sync_masks.items()
-    }
-    df_sync = pd.DataFrame.from_dict(
-        sync_counts, orient='index',
-        columns=[str(i) for i in range(max_p + 1)]
-    )
-    df_sync.index.name = 'indicator'
-    df_sync.to_csv(sync_csv, encoding='utf-8')
-    print(f"[완료] 동시성 결과 저장 → {sync_csv}")
+    with pd.ExcelWriter(sync_xlsx, engine='openpyxl') as writer:
+        for ind_name, mask in sync_masks.items():
+            # 0~max_p 동시 인원수 카운트
+            counts = [int((mask == i).sum()) for i in range(max_p + 1)]
+
+            # ▼ 원하는 형태의 테이블 만들기
+            #    index=지표명  / index name="indicator"
+            df_one = pd.DataFrame([counts], columns=[str(i) for i in range(max_p + 1)])
+            df_one.index = [ind_name]
+            df_one.index.name = "indicator"
+
+            # 헤더( indicator 0 1 2 3 4 ), 데이터 ( bbox_area 7108 ... ) 가 되도록 index 포함 저장
+            sheet_name = _sanitize_sheet_name(ind_name)
+            df_one.to_excel(writer, sheet_name=sheet_name, index=True)
+
+            # 하이라이트: 지표명 셀(A2)을 노란색 + Bold
+            if ind_name in HIGHLIGHT_INDICATORS:
+                ws = writer.sheets[sheet_name]
+                name_cell = ws.cell(row=2, column=1)  # A2 = 지표명 셀
+                name_cell.fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+                name_cell.font = Font(bold=True)
+
+    print(f"[완료] 동시성 결과 저장 → {sync_xlsx}")
 
     # ----------------------------
     # 메타 정보 CSV 저장
