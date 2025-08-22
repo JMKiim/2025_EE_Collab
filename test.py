@@ -242,47 +242,52 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
     # ----------------------------
     # 동시성 카운트 결과 CSV 저장 (wide format)
     # ----------------------------
-    # sync_csv = os.path.join(timeline_dir, 'sync_counts.csv')
-    # max_p = len(pids)
-
-    # # 1) indicator × (0~max_p) wide table 생성
-    # sync_counts = {
-    #     name: [int((mask == i).sum()) for i in range(max_p + 1)]
-    #     for name, mask in sync_masks.items()
-    # }
-    # df_sync = pd.DataFrame.from_dict(
-    #     sync_counts, orient='index',
-    #     columns=[str(i) for i in range(max_p + 1)]
-    # )
-    # df_sync.index.name = 'indicator'
-    # df_sync.to_csv(sync_csv, encoding='utf-8')
-    # print(f"[완료] 동시성 결과 저장 → {sync_csv}")
-
     def _sanitize_sheet_name(name: str) -> str:
         return re.sub(r'[:\\/?*\[\]]', '_', str(name))[:31]
 
     sync_xlsx = os.path.join(timeline_dir, 'sync_counts.xlsx')
     max_p = len(pids)
 
+    # --- [추가] 경로로부터 메타 정보 추출 ---
+    parts = os.path.normpath(timeline_dir).split(os.sep)
+    semester_raw = parts[-4]   # "24-1"
+    group = parts[-3]          # "A4"
+    week = parts[-2]           # "W1"
+    timeline_idx = parts[-1]   # "T1"
+    year_prefix, sem_num = semester_raw.split("-")  # "24", "1"
+    year = "20" + year_prefix  # "2024"
+    semester = sem_num         # "1"
+
     with pd.ExcelWriter(sync_xlsx, engine='openpyxl') as writer:
+        # --- [추가] 1) Meta 시트를 '가장 먼저' 기록해서 엑셀 첫 탭이 되도록 ---
+        df_meta = pd.DataFrame([{
+            "year": year,
+            "semester": semester,
+            "group": group,
+            "week": week,
+            "timeline": timeline_idx,
+            "total_participants": max_p,
+            "total_frames": total_frames
+        }])
+        df_meta.to_excel(writer, sheet_name="Meta", index=False)
+
+        # --- 2) 기존 지표별 동시성 카운트 시트들 (기능 유지) ---
         for ind_name, mask in sync_masks.items():
-            # 0~max_p 동시 인원수 카운트
+            # 0~max_p 동시 인원수 카운트 (기존 로직 유지)
             counts = [int((mask == i).sum()) for i in range(max_p + 1)]
 
-            # ▼ 원하는 형태의 테이블 만들기
-            #    index=지표명  / index name="indicator"
+            # wide 테이블 (기존 로직 유지)
             df_one = pd.DataFrame([counts], columns=[str(i) for i in range(max_p + 1)])
             df_one.index = [ind_name]
             df_one.index.name = "indicator"
 
-            # 헤더( indicator 0 1 2 3 4 ), 데이터 ( bbox_area 7108 ... ) 가 되도록 index 포함 저장
             sheet_name = _sanitize_sheet_name(ind_name)
             df_one.to_excel(writer, sheet_name=sheet_name, index=True)
 
-            # 하이라이트: 지표명 셀(A2)을 노란색 + Bold
+            # 하이라이트 (기존 로직 유지)
             if ind_name in HIGHLIGHT_INDICATORS:
                 ws = writer.sheets[sheet_name]
-                name_cell = ws.cell(row=2, column=1)  # A2 = 지표명 셀
+                name_cell = ws.cell(row=2, column=1)  # A2
                 name_cell.fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
                 name_cell.font = Font(bold=True)
 
@@ -291,10 +296,25 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
     # ----------------------------
     # 메타 정보 CSV 저장
     # ----------------------------
+    parts = os.path.normpath(timeline_dir).split(os.sep)
+
+    # 메타 정보 추출
+    semester_raw = parts[-4]   # "24-1"
+    group = parts[-3]          # "A4"
+    week = parts[-2]           # "W1"
+    timeline_idx = parts[-1]   # "T1"
+
+    # "24-1" → 연도, 학기 분리
+    year_prefix, sem_num = semester_raw.split("-")   # "24", "1"
+    year = "20" + year_prefix   # "2024"
+    semester = sem_num          # "1" (필요시 매핑 가능: 1→Spring, 2→Fall)
+
+    # CSV 저장
     meta_csv = os.path.join(timeline_dir, 'sync_counts_meta.csv')
     with open(meta_csv, 'w', encoding='utf-8') as mf:
-        mf.write("total_participants,total_frames\n")
-        mf.write(f"{max_p},{total_frames}\n")
+        mf.write("year,semester,group,week,timeline,total_participants,total_frames\n")
+        mf.write(f"{year},{semester},{group},{week},{timeline_idx},{max_p},{total_frames}\n")
+
     print(f"[완료] 메타 정보 저장 → {meta_csv}")
 
     # ----------------------------

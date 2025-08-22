@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import re
 from matplotlib.animation import FFMpegWriter
 from matplotlib.gridspec import GridSpec
 from matplotlib.colors import to_rgba
@@ -11,6 +12,9 @@ import time
 from tqdm import tqdm
 from threading import Thread
 from queue import Queue, Empty
+from openpyxl.styles import PatternFill, Font
+
+MAKE_VIDEO = False  # ← 여기만 True/False로 바꿔 쓰면 됨
 
 # ----------------------------
 # 글로벌 폰트 설정 (전체 폰트 크기 축소)
@@ -31,9 +35,9 @@ plt.rcParams.update({
 FPS = 15
 FRAME_WIDTH = 228
 FRAME_HEIGHT = 128
-WINDOW_SECONDS = 120
+WINDOW_SECONDS = 60
 STEP_FRAMES = WINDOW_SECONDS * FPS
-OUTPUT_NAME = "T_Summary_2.mp4"
+OUTPUT_NAME = "test.mp4"
 SHADING_FREQ = FPS  # 초당 한 번만 음영 업데이트
 
 # ----------------------------
@@ -86,14 +90,16 @@ def open_timeline_data(timeline_dir, config_path, start_frame):
         df = pd.read_csv(os.path.join(timeline_dir, fname))
         data_dict[pid] = df
         total_frames = min(total_frames, len(df))
-        base = fname.replace('_augmented.csv','')
-        for ext in ('.mp4', '.avi'):
-            path = os.path.join(timeline_dir, base + ext)
-            if os.path.isfile(path):
-                cap = cv2.VideoCapture(path)
-                cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-                caps[pid] = FrameLoader(cap)
-                break
+
+        if MAKE_VIDEO:
+            base = fname.replace('_augmented.csv','')
+            for ext in ('.mp4', '.avi'):
+                path = os.path.join(timeline_dir, base + ext)
+                if os.path.isfile(path):
+                    cap = cv2.VideoCapture(path)
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+                    caps[pid] = FrameLoader(cap)
+                    break
     print(f"[TIME] Data loading: {time.time() - start:.2f}s")
     return config, global_stats, data_dict, caps, int(total_frames)
 
@@ -215,29 +221,124 @@ def calculate_synchrony_mask(data_dict, config, global_stats):
 def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end_time=None):
     total_start = time.time()
     sf = 0 if start_time is None else int(start_time * FPS)
+
     config, global_stats, data_dict, caps, total_frames = open_timeline_data(timeline_dir, config_path, sf)
     ef = min(int(end_time * FPS), total_frames) if end_time else total_frames
     if not data_dict:
         print('[SKIP] No data')
         return
+    
     pids = list(data_dict.keys())
     indicators = list(config.items())
     colors = plt.cm.tab10.colors
 
     sync_masks = calculate_synchrony_mask(data_dict, config, global_stats)
-    
-    # 동시성 카운트 결과 CSV 저장
-    sync_csv = os.path.join(timeline_dir, 'sync_counts.csv')
-    rows = []
+
+    # 사용자가 직접 지정할 하이라이트 지표 리스트 (원하는 지표명을 추가)
+    HIGHLIGHT_INDICATORS = [
+        "face_distance"
+    ]
+
+    # ----------------------------
+    # 동시성 카운트 결과 CSV 저장 (wide format)
+    # ----------------------------
+    def _sanitize_sheet_name(name: str) -> str:
+        return re.sub(r'[:\\/?*\[\]]', '_', str(name))[:31]
+
+    sync_xlsx = os.path.join(timeline_dir, 'sync_counts.xlsx')
     max_p = len(pids)
-    for name, mask in sync_masks.items():
-        for count in range(max_p+1):
-            rows.append({'indicator': name, 'num_participants': count, 'frame_count': int((mask==count).sum())})
-    df_sync = pd.DataFrame(rows)
-    df_sync['total_participants'] = max_p
-    df_sync['total_frames'] = sync_masks[name].shape[0]
-    df_sync.to_csv(sync_csv, index=False)
-    print(f"[완료] 동시성 결과 저장 → {sync_csv}")
+
+    # --- [추가] 경로로부터 메타 정보 추출 ---
+    parts = os.path.normpath(timeline_dir).split(os.sep)
+    semester_raw = parts[-4]   # "24-1"
+    group = parts[-3]          # "A4"
+    week = parts[-2]           # "W1"
+    timeline_idx = parts[-1]   # "T1"
+    year_prefix, sem_num = semester_raw.split("-")  # "24", "1"
+    year = "20" + year_prefix  # "2024"
+    semester = sem_num         # "1"
+
+    with pd.ExcelWriter(sync_xlsx, engine='openpyxl') as writer:
+        # --- [추가] 1) Meta 시트를 '가장 먼저' 기록해서 엑셀 첫 탭이 되도록 ---
+        df_meta = pd.DataFrame([{
+            "year": year,
+            "semester": semester,
+            "group": group,
+            "week": week,
+            "timeline": timeline_idx,
+            "total_participants": max_p,
+            "total_frames": total_frames
+        }])
+        df_meta.to_excel(writer, sheet_name="Meta", index=False)
+
+        # --- 2) 기존 지표별 동시성 카운트 시트들 (기능 유지) ---
+        for ind_name, mask in sync_masks.items():
+            # 0~max_p 동시 인원수 카운트 (기존 로직 유지)
+            counts = [int((mask == i).sum()) for i in range(max_p + 1)]
+
+            # wide 테이블 (기존 로직 유지)
+            df_one = pd.DataFrame([counts], columns=[str(i) for i in range(max_p + 1)])
+            df_one.index = [ind_name]
+            df_one.index.name = "indicator"
+
+            sheet_name = _sanitize_sheet_name(ind_name)
+            df_one.to_excel(writer, sheet_name=sheet_name, index=True)
+
+            # 하이라이트 (기존 로직 유지)
+            if ind_name in HIGHLIGHT_INDICATORS:
+                ws = writer.sheets[sheet_name]
+                name_cell = ws.cell(row=2, column=1)  # A2
+                name_cell.fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+                name_cell.font = Font(bold=True)
+
+    print(f"[완료] 동시성 결과 저장 → {sync_xlsx}")
+
+    # ----------------------------
+    # 프레임별 개별 행동 마스크 CSV 저장
+    # ----------------------------
+    mask_csv = os.path.join(timeline_dir, 'sync_mask.csv')
+    mask_dict = {}
+    # 각 지표·참여자별 mask 배열 생성
+    for name, cfg in config.items():
+        col = cfg['column']
+        for pid, df in data_dict.items():
+            # raw 값 추출
+            if cfg['type'] == 'numeric':
+                arr = df[col].astype(float).values
+                if cfg.get('zscore', False):
+                    m = global_stats[pid][name]['mean']
+                    s = global_stats[pid][name]['std']
+                    arr = (arr - m) / s
+                mask = arr > cfg.get('threshold_std', 2.0)
+            elif cfg['type'] == 'categorical':
+                raw = df[col].fillna('neutral')
+                mapped = raw.map(cfg['mapping']).fillna(0).astype(bool)
+                mask = mapped.values
+            else:  # event
+                arr = df[col].astype(float).values
+                raw = arr
+                if cfg.get('zscore', False):
+                    m = global_stats[pid][name]['mean']
+                    s = global_stats[pid][name]['std']
+                    raw = (arr - m) / s
+                mask = detect_nod_events(raw,
+                                         cfg['event_params']['fall_z_thresh'],
+                                         cfg['event_params']['rise_z_thresh'],
+                                         cfg['event_params']['max_duration'],
+                                         cfg['event_params']['min_cycles'],
+                                         FPS).astype(bool)
+            mask_dict[(name, pid)] = mask.astype(int)
+    # DataFrame 생성 및 저장
+    mask_df = pd.DataFrame(mask_dict)
+    mask_df.index.name = 'frame'
+    mask_df.columns = pd.MultiIndex.from_tuples(mask_df.columns, names=['indicator','pid'])
+    mask_df.to_csv(mask_csv)
+    print(f"[완료] 프레임별 행동 마스크 (벡터화) → {mask_csv}")
+
+    # 여기서 영상 OFF면 바로 종료
+    if not MAKE_VIDEO:
+        print("[정보] MAKE_VIDEO=False: 시각화 영상 렌더링을 건너뜁니다.")
+        return
     
     raw_vals = [[None] * len(pids) for _ in indicators]
     for i, (name, icfg) in enumerate(indicators):
@@ -254,7 +355,7 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
                 arr = (arr - m) / s
             raw_vals[i][j] = arr
 
-    fig = plt.figure(figsize=(16, 9))
+    fig = plt.figure(figsize=(6, 12))
     gs = GridSpec(1 + len(indicators), len(pids), height_ratios=[1] + [0.7] * len(indicators))
     ims = []
     for idx, pid in enumerate(pids):
@@ -361,6 +462,6 @@ if __name__ == '__main__':
     visualize_timeline_optimized(
         timeline_dir="D:/2025신윤희Data/MediaPipe/24-1/A4/W1/T1",
         config_path="config_indicators.json",
-        start_time=None,
-        end_time=None
+        start_time=1500,
+        end_time=1620
     )
