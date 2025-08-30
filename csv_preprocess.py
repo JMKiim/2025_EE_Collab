@@ -96,6 +96,20 @@ def process_csv(csv_path):
         else:
             df['pitch_vel'] = np.nan
 
+        # yaw 속도 계산
+        if 'pose_Ry' in df.columns:
+            df['yaw_vel'] = df['pose_Ry'].diff() / dt
+            df['yaw_vel'] = df['yaw_vel'].fillna(0)
+        else:
+            df['yaw_vel'] = np.nan
+
+        # roll 속도 계산
+        if 'pose_Rz' in df.columns:
+            df['roll_vel'] = df['pose_Rz'].diff() / dt
+            df['roll_vel'] = df['roll_vel'].fillna(0)
+        else:
+            df['roll_vel'] = np.nan
+
         # 저장
         new_path = csv_path.replace('.csv', '_augmented.csv')
         df.to_csv(new_path, index=False)
