@@ -21,9 +21,9 @@ FPS = 15
 AU_RULES = {
     'happy':     (['AU06_c', 'AU12_c'], 2),  # cheek raiser + lip corner puller
     'sad':       (['AU01_c', 'AU04_c', 'AU15_c'], 3),  # inner brow raiser, brow lowerer, lip corner depressor
-    'anger':     (['AU04_c', 'AU05_c', 'AU07_c', 'AU23_c'], 4),  # brow lowerer, upper lid raiser, lid tightener, lip tightener
-    'disgust':   (['AU09_c', 'AU15_c', 'AU16_c'], 3),  # nose wrinkler, lip corner depressor, lower lip depressor
-    'fear':      (['AU01_c', 'AU02_c', 'AU04_c', 'AU05_c', 'AU07_c', 'AU20_c', 'AU26_c'], 7),  # multiple AU thresholds
+    'anger':     (['AU04_c', 'AU07_c', 'AU23_c'], 3),  # brow lowerer, upper lid raiser, lid tightener, lip tightener
+    'disgust':   (['AU09_c', 'AU10_c', 'AU15_c', 'AU16_c'], 3),  # nose wrinkler, lip corner depressor, lower lip depressor
+    'fear':      (['AU01_c', 'AU02_c', 'AU04_c', 'AU05_c', 'AU07_c', 'AU20_c', 'AU26_c'], 5),  # multiple AU thresholds
     'surprise':  (['AU01_c', 'AU02_c', 'AU05_c', 'AU26_c'], 3),  # inner brow raiser, outer brow raiser, upper lid raiser, jaw drop
 }
 

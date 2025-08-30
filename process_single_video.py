@@ -28,6 +28,6 @@ def process_video(args):
             stdout=subprocess.DEVNULL,   # 출력 숨김
             stderr=subprocess.DEVNULL    # 에러 숨김
         )
-        print(f"[완료] {base_filename}.mp4 → {output_dir}")
+        print(f"[완료] OpenFace 처리: {base_filename}.mp4 → {output_dir}")
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"[오류] OpenFace 처리 실패: {input_video_path}\n{e}")

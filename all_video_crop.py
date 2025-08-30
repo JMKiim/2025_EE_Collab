@@ -66,7 +66,7 @@ def get_crop_coords(num_people, width, height):
             (int(top_left_w) + w,       int(top_left_h),     w, h),  # P2: 상단 중앙
             (int(top_left_w) + 2 * w,   int(top_left_h),     w, h),  # P3: 상단 오른쪽
             (int(top_left_w),           int(mid_y),          w, h),  # P4: 하단 왼쪽
-            (int(top_left_w) + w,       int(mid_y),          w, h)   # P5: 하단 중앙
+            (int(top_left_w) + w,       int(mid_y),          w, h),  # P5: 하단 중앙
             (int(top_left_w) + 2 * w,   int(mid_y),          w, h)   # P6: 하단 오른쪽
         ]
     elif num_people == 7:
@@ -81,8 +81,8 @@ def get_crop_coords(num_people, width, height):
             (int(top_left_w) + w,       int(top_left_h),     w, h),  # P2: 상단 중앙
             (int(top_left_w) + 2 * w,   int(top_left_h),     w, h),  # P3: 상단 오른쪽
             (int(top_left_w),           int(top_left_h) + h, w, h),  # P4: 중단 왼쪽
-            (int(top_left_w) + w,       int(top_left_h) + h, w, h)   # P5: 중단 중앙
-            (int(top_left_w) + 2 * w,   int(top_left_h) + h, w, h)   # P6: 중단 오른쪽
+            (int(top_left_w) + w,       int(top_left_h) + h, w, h),  # P5: 중단 중앙
+            (int(top_left_w) + 2 * w,   int(top_left_h) + h, w, h),  # P6: 중단 오른쪽
             (int(top_left_w) + w,   int(top_left_h) + 2 * h, w, h)   # P7: 하단 중앙
         ]
     else:
