@@ -7,6 +7,24 @@ from single_visualizer import visualize_timeline_optimized  # ← 리네임한 �
 MEDIA_PIPE_ROOT = r"D:/2025신윤희Data/MediaPipe"  # 최상위 루트
 DEFAULT_CONFIG   = "config_indicators.json"
 
+def clean_sync_outputs(timeline_dir: str):
+    """해당 타임라인 폴더의 기존 sync 결과물 제거.
+    - 파일명이 sync_counts* 또는 sync_mask* 로 시작하는 모든 파일(확장자 무관)을 삭제
+    """
+    removed = 0
+    for fname in os.listdir(timeline_dir):
+        low = fname.lower()
+        if low.startswith("sync_counts") or low.startswith("sync_mask"):
+            fpath = os.path.join(timeline_dir, fname)
+            if os.path.isfile(fpath):
+                try:
+                    os.remove(fpath)
+                    removed += 1
+                except Exception as e:
+                    print(f"[WARN] 삭제 실패: {fpath} → {e}")
+    if removed:
+        print(f"[CLEAN] {timeline_dir} → 기존 sync_* 파일 {removed}개 삭제")
+
 def has_required_inputs(timeline_dir: str) -> bool:
     """ 필수 입력이 있는지 간단 체크: global_stats.json + *_augmented.csv 존재 """
     gs = os.path.join(timeline_dir, "global_stats.json")
@@ -87,6 +105,8 @@ def main():
                 skipped += 1
                 continue
 
+            clean_sync_outputs(tl_dir)
+            
             print(f"[RUN] {tl_dir}")
             visualize_timeline_optimized(
                 timeline_dir=tl_dir,

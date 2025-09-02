@@ -50,13 +50,16 @@ def predict_emotion_by_rule(row):
 # ----------------------------
 # bbox 넓이 계산
 # ----------------------------
-def calculate_bbox_area(row):
+def calculate_bbox_area(row, filename=None):
     try:
         xs = np.array([float(row[f'x_{i}']) for i in range(68)])
         ys = np.array([float(row[f'y_{i}']) for i in range(68)])
         return (xs.max() - xs.min()) * (ys.max() - ys.min())
     except Exception as e:
-        print(f'[bbox 오류] {e}')
+        if filename:
+            print(f"[bbox 오류] {filename} -> {e}")
+        else:
+            print(f"[bbox 오류] {e}")
         return np.nan
 
 # ----------------------------
@@ -82,7 +85,9 @@ def process_csv(csv_path):
             print(f'[경고] {os.path.basename(gray_path)} 파일 없음')
 
         # bbox 계산
-        df['bbox_area'] = df.apply(calculate_bbox_area, axis=1)
+        # df['bbox_area'] = df.apply(calculate_bbox_area, axis=1)
+        df['bbox_area'] = df.apply(lambda row: calculate_bbox_area(row, os.path.basename(csv_path)), axis=1)
+
 
         # 감정 추론
         df['emotion'] = df.apply(predict_emotion_by_rule, axis=1)

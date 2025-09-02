@@ -31,10 +31,22 @@ def process_participant(args):
                 # 성공 프레임만 사용
                 if "success" in df.columns:
                     values = values[df["success"] == 1]
+
+                # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+                # [추가] 어디서 비었는지/샘플이 적은지 로깅
+                n = values.dropna().shape[0]
+                if n == 0:
+                    print(f"[WARN][EMPTY] {timeline_dir} | pid={pid} | indicator={key} | column={col} | n=0")
+                elif n < 2:
+                    print(f"[WARN][LOW N] {timeline_dir} | pid={pid} | indicator={key} | column={col} | n={n}")
+                # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
                 mean = np.nanmean(values)
                 std = np.nanstd(values)
                 stats[key] = {"mean": mean, "std": std}
             except KeyError:
+                # 컬럼 자체가 없을 때도 찍어두면 추적 쉬움 (원하면 주석 해제)
+                print(f"[WARN][MISSING COL] {timeline_dir} | pid={pid} | indicator={key} | column={col} 없음")
                 continue
     return pid, stats
 

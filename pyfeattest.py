@@ -32,8 +32,8 @@ def main():
         det = Detector(
             device=device,
             face_model="retinaface",
-            # landmark_model="mobilefacenet",  # ['mobilenet','mobilefacenet','pfld'] 중 택1
-            # au_model="xgb",                  # None 불가 → 최소 모델 지정
+            landmark_model="pfld",  # ['mobilenet','mobilefacenet','pfld'] 중 택1
+            au_model="xgb",                  # None 불가 → 최소 모델 지정
             emotion_model="resmasknet"       # 감정 모델
         )
 

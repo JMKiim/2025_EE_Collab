@@ -6,12 +6,50 @@
     "ymin": -5,
     "ymax": 5,
     "event_params": {
-      "fall_z_thresh": 2.0,
+      "fall_z_thresh": 1.0,
       "rise_z_thresh": -1.0,
       "max_duration": 0.6,
       "min_cycles": 1
     },
-    "sync_window": 2.0
+    "sync_window": 1.0
+  },
+  "face_yaw(vel)": {
+    "column": "yaw_vel",
+    "type": "event",
+    "zscore": true,
+    "ymin": -5,
+    "ymax": 5,
+    "event_params": {
+      "fall_z_thresh": 1.0,
+      "rise_z_thresh": -1.0,
+      "max_duration": 0.6,
+      "min_cycles": 1
+    },
+    "sync_window": 1.0
+  },
+  "face_roll(vel)": {
+    "column": "roll_vel",
+    "type": "event",
+    "zscore": true,
+    "ymin": -5,
+    "ymax": 5,
+    "event_params": {
+      "fall_z_thresh": 1.0,
+      "rise_z_thresh": -1.0,
+      "max_duration": 0.6,
+      "min_cycles": 1
+    },
+    "sync_window": 1.0
+  },
+  "face_pitch": {
+    "column": "pose_Rx",
+    "type": "numeric",
+    "zscore": true,
+    "threshold_std": 1.0,
+    "ymin": -5,
+    "ymax": 5,
+    "sync_window": 1.0,
+    "sync_direction": "any"
   },
   "face_yaw": {
     "column": "pose_Ry",
@@ -57,7 +95,7 @@
     "column": "ME",
     "type": "numeric",
     "zscore": true,
-    "threshold_std": 2.0,
+    "threshold_std": 1.0,
     "ymin": -5,
     "ymax": 5,
     "sync_window": 1.0,

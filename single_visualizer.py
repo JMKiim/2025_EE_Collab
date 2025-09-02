@@ -154,11 +154,12 @@ def calculate_synchrony_mask(data_dict, config, global_stats):
                 else:
                     raw = df[cfg['column']].fillna('neutral') \
                           .map(cfg['mapping']).fillna(0).astype(float).values
+                succ = (df['success'].astype(int).values == 1) if 'success' in df.columns else np.ones_like(raw, bool)
                 if cfg.get('zscore', False):
                     m, s = global_stats[pid][name]['mean'], global_stats[pid][name]['std']
                     raw = (raw - m) / s
-                mats_above.append(raw > thr)
-                mats_below.append(raw < -thr)
+                mats_above.append((raw > thr) & succ)
+                mats_below.append((raw < -thr) & succ)
             mats_above = np.vstack(mats_above)
             mats_below = np.vstack(mats_below)
             ext_above = np.zeros_like(mats_above, dtype=bool)
@@ -174,7 +175,8 @@ def calculate_synchrony_mask(data_dict, config, global_stats):
                 ext_above[idx] = ext_r_ab
                 ext_below[idx] = ext_r_bl
             if mode == 'any':
-                sync = ext_above.sum(axis=0) + ext_below.sum(axis=0)
+                # sync = ext_above.sum(axis=0) + ext_below.sum(axis=0)
+                sync = np.logical_or(ext_above, ext_below).sum(axis=0)
             elif mode == 'same':
                 sync = np.maximum(ext_above.sum(axis=0), ext_below.sum(axis=0))
             elif mode == 'positive':
@@ -185,20 +187,24 @@ def calculate_synchrony_mask(data_dict, config, global_stats):
                 sync = np.zeros_like(ext_above.sum(axis=0), dtype=int)
             masks[name] = sync
 
-        # Event (pitch_vel nod)
+        # Event
         elif ctype == 'event':
             params = cfg['event_params']
-            fall = params.get('fall_z_thresh', 2.0)
+            fall = params.get('fall_z_thresh', 1.0)
             rise = params.get('rise_z_thresh', -1.0)
-            md   = params.get('max_duration', 0.5)
-            mc   = params.get('min_cycles', 2)
+            md   = params.get('max_duration', 0.6)
+            mc   = params.get('min_cycles', 1)
             mats = []
             for pid, df in data_dict.items():
                 raw = df[cfg['column']].astype(float).values
+                succ = (df['success'].astype(int).values == 1) if 'success' in df.columns else np.ones_like(raw, bool)
                 if cfg.get('zscore', False):
                     m, s = global_stats[pid][name]['mean'], global_stats[pid][name]['std']
                     raw = (raw - m) / s
-                mats.append(detect_nod_events(raw, fall, rise, md, mc, FPS))
+                ev = detect_nod_events(raw, fall, rise, md, mc, FPS).astype(bool)
+                # ★ success 적용
+                ev = ev & succ
+                mats.append(ev)
             mats = np.vstack(mats)
             ext = np.zeros_like(mats, dtype=bool)
             for idx in range(mats.shape[0]):
@@ -294,46 +300,163 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
     print(f"[완료] 동시성 결과 저장 → {sync_xlsx}")
 
     # ----------------------------
-    # 프레임별 개별 행동 마스크 CSV 저장
+    # 프레임별 개별 행동 마스크 저장 (원시 -1/0/1 → Excel + 분석 시트)
     # ----------------------------
-    mask_csv = os.path.join(timeline_dir, 'sync_mask.csv')
+    mask_xlsx = os.path.join(timeline_dir, 'sync_mask.xlsx')
     mask_dict = {}
-    # 각 지표·참여자별 mask 배열 생성
+
+    # 1) 원시 -1/0/1 마스크 생성 (윈도 확장 X, 방향/임계만 반영, success 적용 O)
     for name, cfg in config.items():
-        col = cfg['column']
+        ctype = cfg.get('type')
+        thr = cfg.get('threshold_std', 2.0)
+
         for pid, df in data_dict.items():
-            # raw 값 추출
-            if cfg['type'] == 'numeric':
-                arr = df[col].astype(float).values
+            # success==1 프레임만 유효 (없으면 전체 True)
+            succ = (df['success'].astype(int).values == 1) if 'success' in df.columns else np.ones(len(df), dtype=bool)
+
+            if ctype in ('numeric', 'categorical'):
+                if ctype == 'numeric':
+                    raw = df[cfg['column']].astype(float).values
+                else:
+                    # categorical은 수치 매핑으로 받아 ±임계 비교 (bool 캐스팅 금지)
+                    raw = df[cfg['column']].fillna('neutral').map(cfg['mapping']).astype(float).values
+
                 if cfg.get('zscore', False):
                     m = global_stats[pid][name]['mean']
-                    s = global_stats[pid][name]['std']
-                    arr = (arr - m) / s
-                mask = arr > cfg.get('threshold_std', 2.0)
-            elif cfg['type'] == 'categorical':
-                raw = df[col].fillna('neutral')
-                mapped = raw.map(cfg['mapping']).fillna(0).astype(bool)
-                mask = mapped.values
-            else:  # event
-                arr = df[col].astype(float).values
-                raw = arr
+                    s = global_stats[pid][name]['std'] or 0.0
+                    raw = (raw - m) / (s if s != 0 else 1.0)
+
+                above = raw >  thr
+                below = raw < -thr
+
+                signed = np.zeros_like(raw, dtype=int)
+                signed[above & succ] =  1
+                signed[below & succ] = -1
+                # 나머지는 0 (success==0 포함)
+                mask_dict[(name, pid)] = signed
+
+            elif ctype == 'event':
+                vals = df[cfg['column']].astype(float).values
                 if cfg.get('zscore', False):
                     m = global_stats[pid][name]['mean']
-                    s = global_stats[pid][name]['std']
-                    raw = (arr - m) / s
-                mask = detect_nod_events(raw,
-                                         cfg['event_params']['fall_z_thresh'],
-                                         cfg['event_params']['rise_z_thresh'],
-                                         cfg['event_params']['max_duration'],
-                                         cfg['event_params']['min_cycles'],
-                                         FPS).astype(bool)
-            mask_dict[(name, pid)] = mask.astype(int)
-    # DataFrame 생성 및 저장
+                    s = global_stats[pid][name]['std'] or 0.0
+                    vals = (vals - m) / (s if s != 0 else 1.0)
+
+                ep = cfg.get('event_params', {})
+                ev = detect_nod_events(
+                    vals,
+                    ep.get('fall_z_thresh', 2.0),
+                    ep.get('rise_z_thresh', -1.0),
+                    ep.get('max_duration', 0.5),
+                    ep.get('min_cycles', 2),
+                    FPS
+                ).astype(bool)
+
+                signed = np.zeros_like(vals, dtype=int)
+                signed[ev & succ] = 1   # 이벤트는 부호 개념 없음 → 1/0
+                mask_dict[(name, pid)] = signed
+
+            else:
+                continue
+
     mask_df = pd.DataFrame(mask_dict)
     mask_df.index.name = 'frame'
     mask_df.columns = pd.MultiIndex.from_tuples(mask_df.columns, names=['indicator','pid'])
-    mask_df.to_csv(mask_csv)
-    print(f"[완료] 프레임별 행동 마스크 (벡터화) → {mask_csv}")
+
+    # ---------- (A) 지표/참가자 표시 순서 고정 ----------
+    indicator_order = list(config.keys())      # config 정의 순서
+    pid_order       = list(data_dict.keys())   # 로딩된 참가자 순서
+    # 존재하는 컬럼만 유지하여 재인덱싱
+    from itertools import product
+    desired_cols = [c for c in product(indicator_order, pid_order) if c in set(mask_df.columns)]
+    mask_df = mask_df.reindex(columns=pd.MultiIndex.from_tuples(desired_cols, names=['indicator','pid']), copy=False)
+
+    # 2) calculate_synchrony_mask와 동일한 규칙으로 재집계 (윈도 확장 + 방향 모드, any=합집합)
+    def _extend_bool(b: np.ndarray, win: int) -> np.ndarray:
+        """과거 win 프레임 동안 하나라도 True면 현재 True"""
+        if win <= 0:
+            return b.astype(bool)
+        out = np.zeros_like(b, dtype=bool)
+        n = len(b)
+        for t in range(n):
+            s = max(0, t - win)
+            if b[s:t+1].any():
+                out[t] = True
+        return out
+
+    perframe_cols = {}   # key=(indicator, level_str) → 0/1 Series(index=frame)
+    counts_series = {}   # key=indicator → pd.Series(level -> count)
+
+    P = len(pid_order)   # 참가자 수(모든 모드에서 최대 P가 상한)
+    for ind in indicator_order:
+        sub = mask_df[ind]                 # frame × pid, 값 ∈ {-1,0,1}
+        above_raw = (sub ==  1).to_numpy() # F×P
+        below_raw = (sub == -1).to_numpy() # F×P
+
+        win = int(config[ind].get('sync_window', 0.3) * FPS)
+
+        # per-pid 윈도 확장
+        ext_above = np.vstack([_extend_bool(above_raw[:, j], win) for j in range(P)]).T  # F×P
+        ext_below = np.vstack([_extend_bool(below_raw[:, j], win) for j in range(P)]).T  # F×P
+
+        pos_levels  = ext_above.sum(axis=1)                 # 0..P
+        neg_levels  = ext_below.sum(axis=1)                 # 0..P
+        mode = config[ind].get('sync_direction', 'same')
+
+        if mode == 'positive':
+            levels = pos_levels
+        elif mode == 'negative':
+            levels = neg_levels
+        elif mode == 'same':
+            levels = np.maximum(pos_levels, neg_levels)
+        elif mode == 'any':
+            # ★ any = 합집합(OR) → 0..P
+            levels = np.logical_or(ext_above, ext_below).sum(axis=1)
+        else:
+            levels = np.zeros_like(pos_levels, dtype=int)
+
+        # PerFrameLevels: (ind, '0'..'P') 원-핫(0/1)
+        levels_s = pd.Series(levels, index=sub.index)
+        for k in range(0, P + 1):
+            perframe_cols[(ind, str(k))] = (levels_s == k).astype(int)
+
+        # LevelCounts: 0..P 프레임 수
+        vc = levels_s.value_counts().reindex(range(0, P + 1), fill_value=0)
+        vc.index = vc.index.astype(str)
+        counts_series[ind] = vc
+
+    # PerFrameLevels DF (지표/레벨 순서 고정: indicator_order × 0..P)
+    level_cols = [str(k) for k in range(0, P + 1)]
+    perframe_df = pd.DataFrame(perframe_cols, index=mask_df.index)
+    perframe_df.columns = pd.MultiIndex.from_tuples(perframe_df.columns, names=['indicator', 'level'])
+    perframe_df = perframe_df.reindex(
+        columns=pd.MultiIndex.from_product([indicator_order, level_cols]),
+        copy=False
+    )
+    perframe_df.index.name = 'frame'
+
+    # LevelCounts DF (지표 순서 고정)
+    def _flat_label(x):
+        return x if isinstance(x, str) else "_".join(map(str, x)) if isinstance(x, tuple) else str(x)
+
+    indicator_labels = [_flat_label(x) for x in indicator_order]
+    counts_df = pd.DataFrame(
+        0,
+        index=pd.Index(indicator_labels, name='indicator'),
+        columns=level_cols,
+        dtype=int
+    )
+    for ind, ser in counts_series.items():
+        counts_df.loc[_flat_label(ind), ser.index.astype(str)] = ser.values
+
+    # 3) 엑셀로 저장 (세 시트 모두 동일 지표 순서)
+    with pd.ExcelWriter(mask_xlsx, engine='openpyxl') as writer:
+        mask_df.to_excel(writer, sheet_name='RawMask')            # -1/0/1 원시 마스크
+        perframe_df.to_excel(writer, sheet_name='PerFrameLevels') # 프레임×(지표,수준) 0/1
+        counts_df.to_excel(writer, sheet_name='LevelCounts')      # 지표×수준 프레임수
+
+    print(f"[완료] 동작 마스크/레벨 분석 저장 → {mask_xlsx}")
+
 
     # 여기서 영상 OFF면 바로 종료
     if not MAKE_VIDEO:
@@ -355,7 +478,7 @@ def visualize_timeline_optimized(timeline_dir, config_path, start_time=None, end
                 arr = (arr - m) / s
             raw_vals[i][j] = arr
 
-    fig = plt.figure(figsize=(6, 12))
+    fig = plt.figure(figsize=(5, 15))
     gs = GridSpec(1 + len(indicators), len(pids), height_ratios=[1] + [0.7] * len(indicators))
     ims = []
     for idx, pid in enumerate(pids):
